@@ -10,12 +10,47 @@ fn is_ret(instr: &Instruction, ret_thunk: Option<u64>) -> bool {
             };
             match instr.op0_kind() {
                 OpKind::NearBranch64 |OpKind::NearBranch32 | OpKind::NearBranch16 => {
-                    //println!("{ret_thunk:x} {:x} {:x}", instr.next_ip(), instr.near_branch_target());
                     instr.near_branch_target() == ret_thunk
                 },
                 _ => false
             }
         }
+        _ => false
+    }
+}
+
+fn is_target_thunk(
+    instr: &Instruction,
+    ret_thunk: Option<u64>,
+	thunks: &Vec<(String, Option<u64>)>,
+	jump_thunks: &Vec<(String, Option<u64>)>,
+	call_thunks: &Vec<(String, Option<u64>)>
+) -> bool {
+    match instr.mnemonic() {
+        Mnemonic::Jmp => {
+            match instr.op0_kind() {
+                OpKind::NearBranch64 |OpKind::NearBranch32 | OpKind::NearBranch16 => {
+                    let target = instr.near_branch_target();
+
+                    // check return_thunk first
+                    if ret_thunk.map_or(false, |addr| addr == target) {
+                        return true;
+                    }
+
+                    // then check each vector of thunks
+                    for (_, thunk_addr) in thunks.iter().chain(jump_thunks).chain(call_thunks) {
+                        if let Some(addr) = thunk_addr {
+                            if *addr == target {
+                                return true;
+                            }
+                        }
+                    }
+
+                    false
+                },
+                _ => false
+            }
+        },
         _ => false
     }
 }
@@ -66,13 +101,26 @@ fn is_jop(instr: &Instruction, noisy: bool) -> bool {
 
 fn is_invalid(instr: &Instruction) -> bool { matches!(instr.code(), Code::INVALID) }
 
-pub fn is_gadget_tail(instr: &Instruction, rop: bool, sys: bool, jop: bool, noisy: bool, ret_thunk: Option<u64>) -> bool {
+pub fn is_gadget_tail(
+    instr: &Instruction,
+    rop: bool,
+    sys: bool,
+    jop: bool,
+    noisy: bool,
+    ret_thunk: Option<u64>,
+    thunks: &Vec<(String, Option<u64>)>,
+    jump_thunks: &Vec<(String, Option<u64>)>,
+    call_thunks: &Vec<(String, Option<u64>)>
+) -> bool {
 	if is_invalid(instr) {
 		return false;
 	}
 	if instr.flow_control() == FlowControl::Next {
 		return false;
 	}
+    if rop && is_target_thunk(instr, ret_thunk, thunks, jump_thunks, call_thunks) {
+        return true;
+    }
 	if rop && is_ret(instr, ret_thunk) {
 		return true;
 	}

@@ -74,7 +74,14 @@ struct Opt {
 	binary: PathBuf,
 }
 
-fn write_gadgets(mut w: impl Write, gadgets: &[(Gadget, usize)], ret_thunk: Option<u64>) {
+fn write_gadgets(
+    mut w: impl Write,
+    gadgets: &[(Gadget, usize)],
+    ret_thunk: Option<u64>,
+    thunks: &Vec<(String, Option<u64>)>,
+    jump_thunks: &Vec<(String, Option<u64>)>,
+    call_thunks: &Vec<(String, Option<u64>)>
+) {
 	let mut output = ColourFormatter::new();
 	for (gadget, address) in gadgets {
 		output.clear();
@@ -89,6 +96,23 @@ fn write_gadgets(mut w: impl Write, gadgets: &[(Gadget, usize)], ret_thunk: Opti
                 &format!("{ret_thunk:#x} <__x86_return_thunk>;")
             );
         }
+
+        // replace address of thunks/jump_thunks/call_thunks with the String in the vec
+        let replace_thunk_addresses = |thunks: &Vec<(String, Option<u64>)>, formatted: &mut String| {
+            for (name, address) in thunks {
+                if let Some(addr) = address {
+                    *formatted = formatted.replace(
+                        &format!("{addr:#x}"),
+                        &format!("{addr:#x} <{name}>")
+                    );
+                }
+            }
+        };
+
+        // Replace addresses of thunks, jump_thunks, and call_thunks with their names
+        replace_thunk_addresses(thunks, &mut formatted);
+        replace_thunk_addresses(jump_thunks, &mut formatted);
+        replace_thunk_addresses(call_thunks, &mut formatted);
 
         output.write(&formatted, FormatterTextKind::Text);
 		match writeln!(w, "{}", output) {
@@ -150,7 +174,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 		.map(|r| Regex::new(&r))
 		.collect::<Result<Vec<_>, _>>()?;
 
-    let ret_thunk = b.lookup_fn_addr("__x86_return_thunk")?;
+    // arch/x86/include/asm/GEN-for-each-reg.h
+    let regs = ["rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"];
+
+
+    // these are indirect jumps but they don't use the return thunk
+    let thunks: Vec<(String, Option<u64>)> = regs.into_iter()
+        .map(|r| (format!("__x86_indirect_thunk_{r}"), b.lookup_fn_addr(&format!("__x86_indirect_thunk_{r}"))))
+        .collect();
+
+    let jump_thunks: Vec<(String, Option<u64>)> = regs.into_iter()
+        .map(|r| (format!("__x86_indirect_jump_thunk_{r}"), b.lookup_fn_addr(&format!("__x86_indirect_jump_thunk_{r}"))))
+        .collect();
+
+    let call_thunks: Vec<(String, Option<u64>)> = regs.into_iter()
+        .map(|r| (format!("__x86_indirect_call_thunk_{r}"), b.lookup_fn_addr(&format!("__x86_indirect_call_thunk_{r}"))))
+        .collect();
+
+
+    let ret_thunk = b.lookup_fn_addr("__x86_return_thunk");
     //panic!("{}", ret_thunk.unwrap());
 
 	let gadget_to_addr = sections
@@ -159,7 +201,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		.flat_map(|dis| {
 			(0..dis.bytes().len())
 				.into_par_iter()
-				.filter(|offset| dis.is_tail_at(*offset, rop, sys, jop, noisy, ret_thunk))
+				.filter(|offset| dis.is_tail_at(*offset, rop, sys, jop, noisy, ret_thunk, &thunks, &jump_thunks, &call_thunks))
 				.flat_map_iter(|tail| {
 					dis.gadgets_from_tail(tail, max_instructions_per_gadget, noisy, uniq)
 				})
@@ -200,7 +242,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		set_override(colour);
 	}
 
-	write_gadgets(&mut stdout, &gadgets, ret_thunk);
+	write_gadgets(&mut stdout, &gadgets, ret_thunk, &thunks, &jump_thunks, &call_thunks);
 
 	drop(stdout);
 

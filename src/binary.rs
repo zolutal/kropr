@@ -26,8 +26,8 @@ impl Binary {
 
 	pub fn path(&self) -> &Path { &self.path }
 
-    pub fn lookup_fn_addr(&self, fnname: &str) -> Result<Option<u64>> {
-        let elf = match Object::parse(&self.bytes)? {
+    pub fn lookup_fn_addr(&self, fnname: &str) -> Option<u64> {
+        let elf = match Object::parse(&self.bytes).expect("couldn't parse object???, is this a vmlinux?") {
             Object::Elf(e) => e,
             _ => {
                 panic!("wtf expected an elf, gimme a vmlinux");
@@ -40,10 +40,9 @@ impl Binary {
             .collect();
 
         if matched.len() > 0 {
-            return Ok(Some(matched[0]))
+            return Some(matched[0])
         }
-
-        Ok(None)
+        None
     }
 
 	pub fn sections(&self, raw: Option<bool>) -> Result<Vec<Section>> {
