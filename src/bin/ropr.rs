@@ -74,12 +74,23 @@ struct Opt {
 	binary: PathBuf,
 }
 
-fn write_gadgets(mut w: impl Write, gadgets: &[(Gadget, usize)]) {
+fn write_gadgets(mut w: impl Write, gadgets: &[(Gadget, usize)], ret_thunk: Option<u64>) {
 	let mut output = ColourFormatter::new();
 	for (gadget, address) in gadgets {
 		output.clear();
 		output.write(&format!("{:#010x}: ", address), FormatterTextKind::Function);
-		gadget.format_instruction(&mut output);
+
+        let mut formatted = String::new();
+		gadget.format_instruction(&mut formatted);
+
+        if let Some(ret_thunk) = ret_thunk {
+            formatted = formatted.replace(
+                &format!("{ret_thunk:#x};"),
+                &format!("{ret_thunk:#x} <__x86_return_thunk>;")
+            );
+        }
+
+        output.write(&formatted, FormatterTextKind::Text);
 		match writeln!(w, "{}", output) {
 			Ok(_) => (),
 			Err(_) => return, // Pipe closed - finished writing gadgets
@@ -139,13 +150,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 		.map(|r| Regex::new(&r))
 		.collect::<Result<Vec<_>, _>>()?;
 
+    let ret_thunk = b.lookup_fn_addr("__x86_return_thunk")?;
+    //panic!("{}", ret_thunk.unwrap());
+
 	let gadget_to_addr = sections
 		.iter()
 		.filter_map(Disassembly::new)
 		.flat_map(|dis| {
 			(0..dis.bytes().len())
 				.into_par_iter()
-				.filter(|offset| dis.is_tail_at(*offset, rop, sys, jop, noisy))
+				.filter(|offset| dis.is_tail_at(*offset, rop, sys, jop, noisy, ret_thunk))
 				.flat_map_iter(|tail| {
 					dis.gadgets_from_tail(tail, max_instructions_per_gadget, noisy, uniq)
 				})
@@ -169,7 +183,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 			regices.iter().all(|r| r.is_match(&formatted))
 				&& !regices_inverse.iter().any(|r| r.is_match(&formatted))
 		})
-		.filter(|(g, _)| !stack_pivot | g.is_stack_pivot())
+		.filter(|(g, _)| !stack_pivot | g.is_stack_pivot(ret_thunk))
 		.filter(|(g, _)| !base_pivot | g.is_base_pivot())
 		.collect::<Vec<_>>();
 	gadgets.sort_unstable_by(|(_, addr1), (_, addr2)| addr1.cmp(addr2));
@@ -186,7 +200,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		set_override(colour);
 	}
 
-	write_gadgets(&mut stdout, &gadgets);
+	write_gadgets(&mut stdout, &gadgets, ret_thunk);
 
 	drop(stdout);
 

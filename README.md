@@ -6,4 +6,6 @@ Change 'sys' gadgets to not include `syscall` or `int 0x80` since those are neve
 
 Do not include results with interrupt instructions (e.g. int3).
 
+Find gadgets that end in `jmp __x86_return_thunk`
+
 Use install.sh to install as 'kropr' without breaking unmodified ropr installation

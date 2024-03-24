@@ -75,9 +75,9 @@ impl<'b> Disassembly<'b> {
 
 	pub fn instruction(&self, index: usize) -> Option<&Instruction> { self.instructions.get(index) }
 
-	pub fn is_tail_at(&self, index: usize, rop: bool, sys: bool, jop: bool, noisy: bool) -> bool {
+	pub fn is_tail_at(&self, index: usize, rop: bool, sys: bool, jop: bool, noisy: bool, ret_thunk: Option<u64>) -> bool {
 		let instruction = self.instructions[index];
-		is_gadget_tail(&instruction, rop, sys, jop, noisy)
+		is_gadget_tail(&instruction, rop, sys, jop, noisy, ret_thunk)
 	}
 
 	pub fn gadgets_from_tail(

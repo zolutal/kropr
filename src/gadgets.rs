@@ -13,10 +13,10 @@ pub struct Gadget {
 impl Gadget {
 	pub fn instructions(&self) -> &[Instruction] { &self.instructions }
 
-	pub fn is_stack_pivot(&self) -> bool {
+	pub fn is_stack_pivot(&self, ret_thunk: Option<u64>) -> bool {
 		match self.instructions.as_slice() {
 			[] => false,
-			[t] => is_stack_pivot_tail(t),
+			[t] => is_stack_pivot_tail(t, ret_thunk),
 			[h @ .., _] => h.iter().any(is_stack_pivot_head),
 		}
 	}

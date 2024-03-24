@@ -26,6 +26,26 @@ impl Binary {
 
 	pub fn path(&self) -> &Path { &self.path }
 
+    pub fn lookup_fn_addr(&self, fnname: &str) -> Result<Option<u64>> {
+        let elf = match Object::parse(&self.bytes)? {
+            Object::Elf(e) => e,
+            _ => {
+                panic!("wtf expected an elf, gimme a vmlinux");
+            }
+        };
+        let matched: Vec<u64> = elf.syms.iter().filter(|s| {
+                elf.strtab.get_at(s.st_name).unwrap_or("") == fnname
+            })
+            .map(|s| s.st_value)
+            .collect();
+
+        if matched.len() > 0 {
+            return Ok(Some(matched[0]))
+        }
+
+        Ok(None)
+    }
+
 	pub fn sections(&self, raw: Option<bool>) -> Result<Vec<Section>> {
 		match raw {
 			Some(true) => Ok(vec![Section {
