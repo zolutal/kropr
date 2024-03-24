@@ -30,7 +30,7 @@ struct Opt {
 	#[clap(short = 'r', long)]
 	norop: bool,
 
-	/// Removes syscalls and other interrupts
+	/// Removes sysret/iret/sysexit gadgets
 	#[clap(short = 's', long)]
 	nosys: bool,
 
