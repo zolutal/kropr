@@ -99,15 +99,19 @@ impl Binary {
 						Bitness::Bits32
 					};
 					let sections = e
-						.program_headers
+						.section_headers
 						.iter()
-						.filter(|header| header.p_flags & PF_X != 0)
+						.filter(|header| {
+							e.shdr_strtab
+							.get_at(header.sh_name)
+							.unwrap_or("") == ".text"
+						})
 						.map(|header| {
-							let start_offset = header.p_offset as usize;
-							let end_offset = start_offset + header.p_filesz as usize;
+							let start_offset = header.sh_offset as usize;
+							let end_offset = start_offset + header.sh_size as usize;
 							Section {
 								file_offset: start_offset,
-								section_vaddr: header.p_vaddr as usize,
+								section_vaddr: header.sh_addr as usize,
 								program_base: 0,
 								bytes: &self.bytes[start_offset..end_offset],
 								bitness,
