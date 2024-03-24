@@ -82,7 +82,7 @@ pub fn is_rop_gadget_head(instr: &Instruction, noisy: bool) -> bool {
 		return false;
 	}
 	match instr.flow_control() {
-		FlowControl::Next | FlowControl::Interrupt => true,
+		FlowControl::Next => true,
 		FlowControl::ConditionalBranch => noisy,
 		FlowControl::Call => instr.mnemonic() != Mnemonic::Call,
 		_ => false,
