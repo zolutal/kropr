@@ -13,3 +13,5 @@ Do not include results with interrupt instructions (e.g. int3).
 Find gadgets that end in `jmp __x86_return_thunk`, `jmp __x86_indirect_thunk_r*`, `jmp __x86_indirect_jump_thunk_r*`, `jmp __x86_indirect_call_thunk_r*`
 
 Made it so that --noisy treats anything ending in a branch/call as a potential gadget, excluding near jumps can mean that when symbols are not available thunked gadgets are not found
+
+output can be sorted alphabetically via the --sort option
