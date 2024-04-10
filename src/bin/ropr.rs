@@ -70,6 +70,10 @@ struct Opt {
 	#[clap(short = 'u', long)]
 	nouniq: bool,
 
+	/// Alphabetically sort gadget output
+	#[clap(long)]
+	sort: bool,
+
 	/// The path of the file to inspect
 	binary: PathBuf,
 }
@@ -80,12 +84,13 @@ fn write_gadgets(
     ret_thunk: Option<u64>,
     thunks: &Vec<(String, Option<u64>)>,
     jump_thunks: &Vec<(String, Option<u64>)>,
-    call_thunks: &Vec<(String, Option<u64>)>
+    call_thunks: &Vec<(String, Option<u64>)>,
+    sort: bool
 ) {
 	let mut output = ColourFormatter::new();
+    let mut formatted_gadgets: Vec<(usize, String)> = vec![];
 	for (gadget, address) in gadgets {
 		output.clear();
-		output.write(&format!("{:#010x}: ", address), FormatterTextKind::Function);
 
         let mut formatted = String::new();
 		gadget.format_instruction(&mut formatted);
@@ -114,12 +119,30 @@ fn write_gadgets(
         replace_thunk_addresses(jump_thunks, &mut formatted);
         replace_thunk_addresses(call_thunks, &mut formatted);
 
-        output.write(&formatted, FormatterTextKind::Text);
-		match writeln!(w, "{}", output) {
-			Ok(_) => (),
-			Err(_) => return, // Pipe closed - finished writing gadgets
-		}
+        if !sort {
+            output.write(&format!("{:#010x}: ", address), FormatterTextKind::Function);
+            output.write(&formatted, FormatterTextKind::Text);
+            match writeln!(w, "{}", output) {
+                Ok(_) => (),
+                Err(_) => return, // Pipe closed - finished writing gadgets
+            }
+        } else {
+            formatted_gadgets.push((address.clone(), formatted));
+        }
 	}
+
+    if sort {
+        formatted_gadgets.sort_by(|(_, gadget1), (_, gadget2)| gadget1.cmp(gadget2));
+        for (address, formatted) in formatted_gadgets {
+            output.clear();
+            output.write(&format!("{:#010x}: ", address), FormatterTextKind::Function);
+            output.write(&formatted, FormatterTextKind::Text);
+            match writeln!(w, "{}", output) {
+                Ok(_) => (),
+                Err(_) => return, // Pipe closed - finished writing gadgets
+            }
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -137,6 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let sys = !opts.nosys;
 	let jop = !opts.nojop;
 	let uniq = !opts.nouniq;
+	let sort = opts.sort;
 	let stack_pivot = opts.stack_pivot;
 	let base_pivot = opts.base_pivot;
 	let max_instructions_per_gadget = opts.max_instr as usize;
@@ -176,7 +200,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // arch/x86/include/asm/GEN-for-each-reg.h
     let regs = ["rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"];
-
 
     // these are indirect jumps but they don't use the return thunk
     let thunks: Vec<(String, Option<u64>)> = regs.into_iter()
@@ -242,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		set_override(colour);
 	}
 
-	write_gadgets(&mut stdout, &gadgets, ret_thunk, &thunks, &jump_thunks, &call_thunks);
+	write_gadgets(&mut stdout, &gadgets, ret_thunk, &thunks, &jump_thunks, &call_thunks, sort);
 
 	drop(stdout);
 
