@@ -76,6 +76,10 @@ struct Opt {
 
 	/// The path of the file to inspect
 	binary: PathBuf,
+
+    /// Print addresses of useful symbols, requires symbols present (overrides all other options)
+	#[clap(long)]
+	magic: bool,
 }
 
 fn write_gadgets(
@@ -145,6 +149,27 @@ fn write_gadgets(
     }
 }
 
+fn print_magic(bin: &Binary) {
+    let base = bin.get_sym_addr("_text").unwrap_or(0);
+
+    let syms = [
+        "modprobe_path",
+        "core_pattern",
+        "init_cred",
+        "prepare_kernel_cred",
+        "commit_creds",
+        "find_task_by_vpid",
+        "init_nsproxy",
+        "switch_task_namespaces",
+    ];
+
+    for sym in syms {
+        if let Some(addr) = bin.get_sym_addr(sym) {
+            println!("#define {:<24} {:#x}", sym.to_uppercase(), addr-base);
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
 	let start = Instant::now();
 
@@ -161,9 +186,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let jop = !opts.nojop;
 	let uniq = !opts.nouniq;
 	let sort = opts.sort;
+	let magic = opts.magic;
 	let stack_pivot = opts.stack_pivot;
 	let base_pivot = opts.base_pivot;
 	let max_instructions_per_gadget = opts.max_instr as usize;
+
+    if magic {
+        print_magic(&b);
+        return Ok(());
+    }
 
 	if max_instructions_per_gadget == 0 {
 		panic!("Max instructions must be >0");
@@ -203,19 +234,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // these are indirect jumps but they don't use the return thunk
     let thunks: Vec<(String, Option<u64>)> = regs.into_iter()
-        .map(|r| (format!("__x86_indirect_thunk_{r}"), b.lookup_fn_addr(&format!("__x86_indirect_thunk_{r}"))))
+        .map(|r| (format!("__x86_indirect_thunk_{r}"), b.get_sym_addr(&format!("__x86_indirect_thunk_{r}"))))
         .collect();
 
     let jump_thunks: Vec<(String, Option<u64>)> = regs.into_iter()
-        .map(|r| (format!("__x86_indirect_jump_thunk_{r}"), b.lookup_fn_addr(&format!("__x86_indirect_jump_thunk_{r}"))))
+        .map(|r| (format!("__x86_indirect_jump_thunk_{r}"), b.get_sym_addr(&format!("__x86_indirect_jump_thunk_{r}"))))
         .collect();
 
     let call_thunks: Vec<(String, Option<u64>)> = regs.into_iter()
-        .map(|r| (format!("__x86_indirect_call_thunk_{r}"), b.lookup_fn_addr(&format!("__x86_indirect_call_thunk_{r}"))))
+        .map(|r| (format!("__x86_indirect_call_thunk_{r}"), b.get_sym_addr(&format!("__x86_indirect_call_thunk_{r}"))))
         .collect();
 
 
-    let ret_thunk = b.lookup_fn_addr("__x86_return_thunk");
+    let ret_thunk = b.get_sym_addr("__x86_return_thunk");
     //panic!("{}", ret_thunk.unwrap());
 
 	let gadget_to_addr = sections

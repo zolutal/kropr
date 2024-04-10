@@ -14,4 +14,6 @@ Find gadgets that end in `jmp __x86_return_thunk`, `jmp __x86_indirect_thunk_r*`
 
 Made it so that --noisy treats anything ending in a branch/call as a potential gadget, excluding near jumps can mean that when symbols are not available thunked gadgets are not found
 
-output can be sorted alphabetically via the --sort option
+Output can be sorted alphabetically via the --sort option
+
+The --magic flag can be used to get some commonly used offsets

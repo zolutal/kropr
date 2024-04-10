@@ -26,7 +26,7 @@ impl Binary {
 
 	pub fn path(&self) -> &Path { &self.path }
 
-    pub fn lookup_fn_addr(&self, fnname: &str) -> Option<u64> {
+    pub fn get_sym_addr(&self, fnname: &str) -> Option<u64> {
         let elf = match Object::parse(&self.bytes).expect("couldn't parse object???, is this a vmlinux?") {
             Object::Elf(e) => e,
             _ => {
