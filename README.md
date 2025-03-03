@@ -18,4 +18,4 @@ Output can be sorted alphabetically via the --sort option
 
 The --magic flag can be used to get some commonly used offsets
 
-Conditionally apply self-patching according to the .return_sites section (patches `jmp __x86_return_thunk` to `ret; int3; int3; int3` to match the kernel's behavior) via --patch_rets
+Conditionally apply self-patching according to the .return_sites section (patches `jmp __x86_return_thunk` to `ret; int3; int3; int3; int3;` to match the kernel's behavior) via --patch_rets
