@@ -45,6 +45,63 @@ impl Binary {
         None
     }
 
+    pub fn apply_returnsites(&mut self) -> Result<()> {
+        if let Object::Elf(e) = Object::parse(&self.bytes)? {
+            let return_sites: Option<Vec<usize>> = e
+                .section_headers
+                .iter()
+                .find(|header| {
+                    e.shdr_strtab
+                    .get_at(header.sh_name)
+                    .unwrap_or("") == ".return_sites"
+                })
+                .map(|header| {
+                    let start_offset = header.sh_offset as usize;
+                    let end_offset = start_offset + header.sh_size as usize;
+                    let data = &self.bytes[start_offset..end_offset].to_vec();
+                    data.chunks(4)
+                        .enumerate()
+                        .map(|(idx, chunk)| {
+                            i32::from_ne_bytes(chunk.try_into().expect(
+                                "Failed to cast return site entry to i32"
+                            )) as i64 as usize + (header.sh_addr as usize + (idx * 4))
+                    }).collect()
+                });
+
+            let return_sites = match return_sites {
+                Some(r) => r,
+                None => {
+                    eprintln!(".return_sites section not found, skipping!");
+                    return Ok(())
+                }
+            };
+
+            if let Some(header) = e.section_headers.iter()
+                .find(|header| {
+                    e.shdr_strtab
+                    .get_at(header.sh_name)
+                    .unwrap_or("") == ".text"
+                })
+            {
+                let start_addr = header.sh_addr as usize;
+                let text_start_offset = header.sh_offset as usize;
+                return_sites.iter()
+                    .for_each(|ret_vaddr| {
+                        let ret_text_offset = ret_vaddr-start_addr;
+                        if ret_text_offset > (header.sh_size as usize) {
+                            // probably in .init.text
+                        } else {
+                            let patch_addr = text_start_offset + ret_text_offset;
+                            self.bytes[patch_addr..patch_addr+5]
+                                .copy_from_slice(&[0xc3, 0xcc, 0xcc, 0xcc, 0xcc]);
+                        }
+                    })
+            }
+        };
+
+        Ok(())
+    }
+
 	pub fn sections(&self, raw: Option<bool>) -> Result<Vec<Section>> {
 		match raw {
 			Some(true) => Ok(vec![Section {
