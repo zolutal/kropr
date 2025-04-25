@@ -46,6 +46,10 @@ struct Opt {
 	#[clap(short = 'b', long)]
 	base_pivot: bool,
 
+	/// Exclude gadgets that begin with a NOP instruction, defaults to true
+	#[clap(long)]
+	trim_nops: Option<bool>,
+
 	/// Apply patches for returnsite thunks based on the .return_sites section, defaults to true
 	#[clap(long)]
 	patch_rets: Option<bool>,
@@ -190,11 +194,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let uniq = !opts.nouniq;
 	let sort = opts.sort;
 	let magic = opts.magic;
+	let trim_nops = opts.trim_nops.unwrap_or(true);
 	let patch_rets = opts.patch_rets;
 	let patch_retpolines = opts.patch_retpolines;
 	let stack_pivot = opts.stack_pivot;
 	let base_pivot = opts.base_pivot;
 	let max_instructions_per_gadget = opts.max_instr as usize;
+
+    if magic {
+        print_magic(&b);
+        return Ok(());
+    }
 
     if patch_rets.unwrap_or(true) {
         b.apply_returnsites()?;
@@ -205,16 +215,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             Some(addr) => b.patch_retpolines(addr)?,
             None => eprintln!("could not find __x86_indirect_thunk_array symbol, skipping retpoline patching!")
         }
-
-
     }
 
 	let sections = b.sections(opts.raw)?;
-
-    if magic {
-        print_magic(&b);
-        return Ok(());
-    }
 
 	if max_instructions_per_gadget == 0 {
 		panic!("Max instructions must be >0");
@@ -291,6 +294,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		})
 		.filter(|(g, _)| !stack_pivot | g.is_stack_pivot(ret_thunk))
 		.filter(|(g, _)| !base_pivot | g.is_base_pivot())
+		.filter(|(g, _)| !trim_nops | !matches!(g.instructions()[0].mnemonic(), iced_x86::Mnemonic::Nop))
 		.collect::<Vec<_>>();
 	gadgets.sort_unstable_by(|(_, addr1), (_, addr2)| addr1.cmp(addr2));
 
