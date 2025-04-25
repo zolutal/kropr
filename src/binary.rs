@@ -1,5 +1,6 @@
-use crate::error::{Error, Result};
+use crate::{disassembler::Disassembler, error::{Error, Result}};
 use goblin::{elf64::program_header::PF_X, pe::section_table::IMAGE_SCN_MEM_EXECUTE, Object};
+use iced_x86::{Code, Formatter, FormatterOutput, Instruction, OpKind};
 use std::{
 	fs::read,
 	path::{Path, PathBuf},
@@ -44,6 +45,121 @@ impl Binary {
         }
         None
     }
+
+    pub fn patch_retpolines(&mut self, thunk_array_addr: u64) -> Result<()> {
+        if let Object::Elf(e) = Object::parse(&self.bytes)? {
+            let return_sites: Option<Vec<usize>> = e
+                .section_headers
+                .iter()
+                .find(|header| {
+                    e.shdr_strtab
+                    .get_at(header.sh_name)
+                    .unwrap_or("") == ".retpoline_sites"
+                })
+                .map(|header| {
+                    let start_offset = header.sh_offset as usize;
+                    let end_offset = start_offset + header.sh_size as usize;
+                    let data = &self.bytes[start_offset..end_offset].to_vec();
+                    data.chunks(4)
+                        .enumerate()
+                        .map(|(idx, chunk)| {
+                            i32::from_ne_bytes(chunk.try_into().expect(
+                                "Failed to cast return site entry to i32"
+                            )) as i64 as usize + (header.sh_addr as usize + (idx * 4))
+                    }).collect()
+                });
+
+            let return_sites = match return_sites {
+                Some(r) => r,
+                None => {
+                    eprintln!(".retpoline_sites section not found, skipping!");
+                    return Ok(())
+                }
+            };
+
+            if let Some(header) = e.section_headers.iter()
+                .find(|header| {
+                    e.shdr_strtab
+                    .get_at(header.sh_name)
+                    .unwrap_or("") == ".text"
+                })
+            {
+                let start_addr = header.sh_addr as usize;
+                let text_start_offset = header.sh_offset as usize;
+                return_sites.iter()
+                    .for_each(|retp_vaddr| {
+                        let retp_text_offset = retp_vaddr-start_addr;
+                        if retp_text_offset > (header.sh_size as usize) {
+                            // probably in .init.text
+                        } else {
+                            let patch_addr = text_start_offset + retp_text_offset;
+                            let mut dis = Disassembler::new(Bitness::Bits64, &self.bytes[patch_addr..patch_addr+15]);
+                            let mut instr = Instruction::default();
+                            dis.decode_at_offset(*retp_vaddr as u64, 0, &mut instr);
+
+                            let target = instr.near_branch_target();
+
+                            // RETPOLINE_THUNK_SIZE == 32
+                            let mut reg = (target - thunk_array_addr) / 32;
+
+                            if reg == 4 {
+                                panic!("retpoline CALL/JMP to rsp? wtf?")
+                            }
+
+                            let mut modrm: u8 = match instr.code() {
+                                Code::Call_rel32_64 => {
+                                    0x10
+                                },
+                                Code::Jmp_rel32_64 => {
+                                    0x20
+                                },
+                                // There might be another case for a conditional relative jmp
+                                // but I don't know when that ever would get emitted?
+                                _ => panic!("encountered retpoline site that wasnt jmp or call")
+                            };
+
+                            let patch_start = text_start_offset + retp_text_offset;
+                            let mut patch_idx = 0;
+                            if reg >= 8 {
+                                self.bytes[patch_start+patch_idx] = 0x41; // REX.B prefix
+                                patch_idx += 1;
+                                reg -= 8;
+                            }
+
+                            modrm |= 0xc0;
+                            modrm += reg as u8;
+
+                            self.bytes[patch_addr+patch_idx] = 0xff;
+                            patch_idx += 1;
+
+                            self.bytes[patch_addr+patch_idx] = modrm;
+                            patch_idx += 1;
+
+                            // this isn't exactly what the kernel does, but just fill with nops
+                            // it does some nop optimizations to reduce the number of instructions
+                            // too lazy to implement that and it doesn't really matter anyways
+                            self.bytes[patch_addr+patch_idx..patch_addr+instr.len()].fill(0x90);
+                        }
+                    })
+            }
+        };
+
+        Ok(())
+    }
+
+	pub fn format_instruction(&self, insn: &iced_x86::Instruction, output: &mut impl FormatterOutput) {
+		let mut formatter = iced_x86::IntelFormatter::new();
+		let options = iced_x86::Formatter::options_mut(&mut formatter);
+		options.set_hex_prefix("0x");
+		options.set_hex_suffix("");
+		options.set_space_after_operand_separator(true);
+		options.set_branch_leading_zeroes(false);
+		options.set_uppercase_hex(false);
+		options.set_rip_relative_addresses(true);
+		// Write instructions
+        formatter.format(insn, output);
+        output.write(" ", iced_x86::FormatterTextKind::Text);
+	}
 
     pub fn apply_returnsites(&mut self) -> Result<()> {
         if let Object::Elf(e) = Object::parse(&self.bytes)? {

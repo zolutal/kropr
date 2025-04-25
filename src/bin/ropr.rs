@@ -50,6 +50,10 @@ struct Opt {
 	#[clap(long)]
 	patch_rets: Option<bool>,
 
+	/// Apply patches to convert retpoline thunks to calls based on the .retpoline_sites section, defaults to true
+	#[clap(long)]
+	patch_retpolines: Option<bool>,
+
 	/// Maximum number of instructions in a gadget
 	#[clap(short, long, default_value = "6")]
 	max_instr: u8,
@@ -191,12 +195,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let sort = opts.sort;
 	let magic = opts.magic;
 	let patch_rets = opts.patch_rets;
+	let patch_retpolines = opts.patch_retpolines;
 	let stack_pivot = opts.stack_pivot;
 	let base_pivot = opts.base_pivot;
 	let max_instructions_per_gadget = opts.max_instr as usize;
 
     if patch_rets.unwrap_or(true) {
         b.apply_returnsites()?;
+    }
+
+    if patch_retpolines.unwrap_or(true) {
+        match b.get_sym_addr("__x86_indirect_thunk_array") {
+            Some(addr) => b.patch_retpolines(addr)?,
+            None => eprintln!("could not find __x86_indirect_thunk_array symbol, skipping retpoline patching!")
+        }
+
+
     }
 
 	let sections = b.sections(opts.raw)?;
