@@ -6,7 +6,7 @@ Use install.sh to install as 'kropr' without breaking unmodified ropr installati
 
 Reduce false positives and false negatives that are a result of linux kernel self-patching, filter out gadgets that are unusable in the kernel context, and add convenience methods.
 
-## Changes Made:
+## Changes Made
 
 ### Only scan .text
 Prevent scanning executable sections besides .text (e.g. .init.text for gadgets), they won't be executable at runtime.
