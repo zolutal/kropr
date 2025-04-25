@@ -95,8 +95,6 @@ fn write_gadgets(
     gadgets: &[(Gadget, usize)],
     ret_thunk: Option<u64>,
     thunks: &Vec<(String, Option<u64>)>,
-    jump_thunks: &Vec<(String, Option<u64>)>,
-    call_thunks: &Vec<(String, Option<u64>)>,
     sort: bool
 ) {
 	let mut output = ColourFormatter::new();
@@ -126,10 +124,8 @@ fn write_gadgets(
             }
         };
 
-        // Replace addresses of thunks, jump_thunks, and call_thunks with their names
+        // Replace addresses of thunks with their names
         replace_thunk_addresses(thunks, &mut formatted);
-        replace_thunk_addresses(jump_thunks, &mut formatted);
-        replace_thunk_addresses(call_thunks, &mut formatted);
 
         if !sort {
             output.write(&format!("{:#010x}: ", address), FormatterTextKind::Function);
@@ -261,17 +257,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|r| (format!("__x86_indirect_thunk_{r}"), b.get_sym_addr(&format!("__x86_indirect_thunk_{r}"))))
         .collect();
 
-    let jump_thunks: Vec<(String, Option<u64>)> = regs.into_iter()
-        .map(|r| (format!("__x86_indirect_jump_thunk_{r}"), b.get_sym_addr(&format!("__x86_indirect_jump_thunk_{r}"))))
-        .collect();
-
-    let call_thunks: Vec<(String, Option<u64>)> = regs.into_iter()
-        .map(|r| (format!("__x86_indirect_call_thunk_{r}"), b.get_sym_addr(&format!("__x86_indirect_call_thunk_{r}"))))
-        .collect();
-
-
     let ret_thunk = b.get_sym_addr("__x86_return_thunk");
-    //panic!("{}", ret_thunk.unwrap());
 
 	let gadget_to_addr = sections
 		.iter()
@@ -279,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		.flat_map(|dis| {
 			(0..dis.bytes().len())
 				.into_par_iter()
-				.filter(|offset| dis.is_tail_at(*offset, rop, sys, jop, noisy, ret_thunk, &thunks, &jump_thunks, &call_thunks))
+				.filter(|offset| dis.is_tail_at(*offset, rop, sys, jop, noisy, ret_thunk, &thunks))
 				.flat_map_iter(|tail| {
 					dis.gadgets_from_tail(tail, max_instructions_per_gadget, noisy, uniq)
 				})
@@ -320,7 +306,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		set_override(colour);
 	}
 
-	write_gadgets(&mut stdout, &gadgets, ret_thunk, &thunks, &jump_thunks, &call_thunks, sort);
+	write_gadgets(&mut stdout, &gadgets, ret_thunk, &thunks, sort);
 
 	stdout.into_inner()?.flush()?;
 

@@ -84,11 +84,9 @@ impl<'b> Disassembly<'b> {
         noisy: bool,
         ret_thunk: Option<u64>,
         thunks: &Vec<(String, Option<u64>)>,
-        jump_thunks: &Vec<(String, Option<u64>)>,
-        call_thunks: &Vec<(String, Option<u64>)>
     ) -> bool {
 		let instruction = self.instructions[index];
-		is_gadget_tail(&instruction, rop, sys, jop, noisy, ret_thunk, thunks, jump_thunks, call_thunks)
+		is_gadget_tail(&instruction, rop, sys, jop, noisy, ret_thunk, thunks)
 	}
 
 	pub fn gadgets_from_tail(

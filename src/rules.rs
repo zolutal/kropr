@@ -23,8 +23,6 @@ fn is_target_thunk(
     instr: &Instruction,
     ret_thunk: Option<u64>,
 	thunks: &Vec<(String, Option<u64>)>,
-	jump_thunks: &Vec<(String, Option<u64>)>,
-	call_thunks: &Vec<(String, Option<u64>)>
 ) -> bool {
     match instr.mnemonic() {
         Mnemonic::Jmp => {
@@ -33,12 +31,12 @@ fn is_target_thunk(
                     let target = instr.near_branch_target();
 
                     // check return_thunk first
-                    if ret_thunk.map_or(false, |addr| addr == target) {
+                    if ret_thunk == Some(target) {
                         return true;
                     }
 
                     // then check each vector of thunks
-                    for (_, thunk_addr) in thunks.iter().chain(jump_thunks).chain(call_thunks) {
+                    for (_, thunk_addr) in thunks.iter() {
                         if let Some(addr) = thunk_addr {
                             if *addr == target {
                                 return true;
@@ -103,8 +101,6 @@ pub fn is_gadget_tail(
     noisy: bool,
     ret_thunk: Option<u64>,
     thunks: &Vec<(String, Option<u64>)>,
-    jump_thunks: &Vec<(String, Option<u64>)>,
-    call_thunks: &Vec<(String, Option<u64>)>
 ) -> bool {
 	if is_invalid(instr) {
 		return false;
@@ -112,7 +108,7 @@ pub fn is_gadget_tail(
 	if instr.flow_control() == FlowControl::Next {
 		return false;
 	}
-    if rop && is_target_thunk(instr, ret_thunk, thunks, jump_thunks, call_thunks) {
+    if rop && is_target_thunk(instr, ret_thunk, thunks) {
         return true;
     }
 	if rop && is_ret(instr, ret_thunk) {
