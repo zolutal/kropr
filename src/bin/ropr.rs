@@ -322,7 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	write_gadgets(&mut stdout, &gadgets, ret_thunk, &thunks, &jump_thunks, &call_thunks, sort);
 
-	drop(stdout);
+	stdout.into_inner()?.flush()?;
 
 	eprintln!(
 		"\n==> Found {} gadgets in {:.3} seconds",
