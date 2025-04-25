@@ -1,6 +1,6 @@
 use crate::{disassembler::Disassembler, error::{Error, Result}};
 use goblin::{elf64::program_header::PF_X, pe::section_table::IMAGE_SCN_MEM_EXECUTE, Object};
-use iced_x86::{Code, Formatter, FormatterOutput, Instruction, OpKind};
+use iced_x86::{Code, Formatter, FormatterOutput, Instruction};
 use std::{
 	fs::read,
 	path::{Path, PathBuf},
